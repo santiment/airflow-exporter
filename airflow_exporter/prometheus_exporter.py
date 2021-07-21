@@ -1,5 +1,6 @@
 import typing
 from typing import List, Tuple, Optional, Generator, NamedTuple, Dict
+import datetime
 
 from dataclasses import dataclass
 import itertools
@@ -38,15 +39,21 @@ def get_dag_schedule_interval() -> List[DagScheduleInterval]:
         DagModel.dag_id
     ).all()
 
+    filtered_schedule_intervals = select_datetime_schedule_intervals(sql_res)
+
     res = [
         DagScheduleInterval(
             dag_id = i.dag_id,
-            cnt = int(i.schedule_interval.total_seconds())
+            cnt = i.schedule_interval.total_seconds()
         )
-        for i in sql_res
+        for i in filtered_schedule_intervals
     ]
 
     return res
+
+def select_datetime_schedule_intervals(schedule_intervals) -> List[datetime.timedelta]:
+    return [i  for i in schedule_intervals if isinstance(i.schedule_interval, datetime.timedelta)]
+
 @dataclass
 class DagStatusInfo:
     dag_id: str
