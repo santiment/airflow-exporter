@@ -51,7 +51,7 @@ Label `env` with value `test` will be added to all metrics related to `dummy_dag
 
 ## Metrics
 
-Metrics will be available at 
+Metrics will be available at
 
 ```
 http://<your_airflow_host_and_port>/admin/metrics/
@@ -84,7 +84,7 @@ Labels:
 
 * `dag_id`: unique identifier for a given DAG
 
-Value: duration in seconds of the longest DAG Run for given DAG. This metric 
+Value: duration in seconds of the longest DAG Run for given DAG. This metric
 is not available for DAGs that have already finished.
 
 ### `airflow_dag_elapsed_time`
@@ -95,6 +95,13 @@ Labels:
 
 Value: duration in seconds from the last successful dag run's start date.
 
+### `airflow_dag_schedule_interval`
+
+Labels:
+
+* `dag_id`: unique identifier for a given DAG
+
+Value: DAG's schedule interval in seconds.
 
 ### `airflow_dag_last_status`
 

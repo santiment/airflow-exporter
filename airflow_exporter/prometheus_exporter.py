@@ -22,6 +22,31 @@ from prometheus_client.samples import Sample
 
 import itertools
 
+
+@dataclass
+class DagScheduleInterval:
+    dag_id: str
+    cnt: int
+
+def get_dag_schedule_interval() -> List[DagScheduleInterval]:
+    assert(Session is not None)
+
+    sql_res = Session.query( # pylint: disable=no-member
+        DagModel.dag_id,
+        DagModel.schedule_interval
+    ).group_by(
+        DagModel.dag_id
+    ).all()
+
+    res = [
+        DagScheduleInterval(
+            dag_id = i.dag_id,
+            cnt = int(i.schedule_interval.total_seconds())
+        )
+        for i in sql_res
+    ]
+
+    return res
 @dataclass
 class DagStatusInfo:
     dag_id: str
@@ -36,13 +61,20 @@ def get_dag_status_info() -> List[DagStatusInfo]:
     assert(Session is not None)
 
     dag_status_query = Session.query( # pylint: disable=no-member
-        DagRun.dag_id, DagRun.state, func.count(DagRun.state).label('cnt')
+        DagRun.dag_id,
+        DagRun.state,
+        func.count(DagRun.state).label('cnt')
     ).group_by(DagRun.dag_id, DagRun.state).subquery()
 
     sql_res = Session.query( # pylint: disable=no-member
-        dag_status_query.c.dag_id, dag_status_query.c.state, dag_status_query.c.cnt,
-        DagModel.owners
-    ).join(DagModel, DagModel.dag_id == dag_status_query.c.dag_id).all()
+        dag_status_query.c.dag_id,
+        dag_status_query.c.state,
+        dag_status_query.c.cnt,
+        DagModel.owners,
+    ).join(
+        DagModel,
+        DagModel.dag_id == dag_status_query.c.dag_id
+    ).all()
 
     res = [
         DagStatusInfo(
@@ -85,7 +117,6 @@ def get_last_dagrun_info() -> List[DagStatusInfo]:
     ]
 
     return res
-
 
 @dataclass
 class TaskStatusInfo:
@@ -226,7 +257,8 @@ def get_dag_labels(dag_id: str) -> Dict[str, str]:
 
 def _add_gauge_metric(metric, labels, value):
     metric.samples.append(Sample(
-        metric.name, labels,
+        metric.name,
+        labels,
         value,
         None
     ))
@@ -265,6 +297,29 @@ class MetricsCollector(object):
             )
 
         yield dag_status_metric
+
+
+        dag_schedule_interval = get_dag_schedule_interval()
+
+        dag_schedule_interval_metric = GaugeMetricFamily(
+            'airflow_dag_schedule_interval',
+            'Shows the DAG schedule interval in seconds',
+            labels=['dag_id', 'schedule_interval']
+        )
+
+        for dag in dag_schedule_interval:
+            labels = get_dag_labels(dag.dag_id)
+
+            _add_gauge_metric(
+                dag_schedule_interval_metric,
+                {
+                    'dag_id': dag.dag_id,
+                    **labels
+                },
+                dag.cnt,
+            )
+
+        yield dag_schedule_interval_metric
 
         # Last DagRun Metrics
         last_dagrun_info = get_last_dagrun_info()
