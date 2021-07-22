@@ -57,6 +57,14 @@ Metrics will be available at
 http://<your_airflow_host_and_port>/admin/metrics/
 ```
 
+### `airflow_running_pool_slots`
+
+Labels:
+
+* `pool`
+
+Value: number of running slots in a pool.
+
 ### `airflow_task_status`
 
 Labels:

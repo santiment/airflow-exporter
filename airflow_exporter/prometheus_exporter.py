@@ -13,7 +13,7 @@ from flask_appbuilder import BaseView as FABBaseView, expose as FABexpose
 
 from airflow.plugins_manager import AirflowPlugin
 from airflow.settings import Session
-from airflow.models import TaskInstance, DagModel, DagRun
+from airflow.models import TaskInstance, DagModel, DagRun, Pool
 from airflow.utils.state import State
 
 # Importing base classes that we need to derive
@@ -23,6 +23,20 @@ from prometheus_client.samples import Sample
 
 import itertools
 
+@dataclass
+class RunningPoolSlots:
+    pool: str
+    cnt: int
+
+def get_running_pool_stats():
+    slots = Pool.slots_stats()
+
+    res = [
+        RunningPoolSlots(pool=key, cnt=value['running'])
+        for key, value in slots.items()
+    ]
+
+    return res
 
 @dataclass
 class DagScheduleInterval:
@@ -279,6 +293,19 @@ class MetricsCollector(object):
 
     def collect(self) -> Generator[Metric, None, None]:
         '''collect metrics'''
+
+        pool_stats = get_running_pool_stats()
+
+        running_pool_slots_metric = GaugeMetricFamily(
+            'airflow_running_pool_slots',
+            'Shows the number of running pool slots',
+            labels=['pool']
+        )
+
+        for pool_stat in pool_stats:
+            _add_gauge_metric(running_pool_slots_metric, {'pool': pool_stat.pool}, pool_stat.cnt)
+
+        yield running_pool_slots_metric
 
         # Dag Metrics and collect all labels
         dag_info = get_dag_status_info()
