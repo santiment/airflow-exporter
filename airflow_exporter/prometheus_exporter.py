@@ -23,20 +23,19 @@ from prometheus_client.samples import Sample
 
 import itertools
 
+POOL_SLOT_TYPES = ['total', 'running', 'queued', 'open']
+
 @dataclass
-class RunningPoolSlots:
+class PoolSlots:
     pool: str
     cnt: int
 
-def get_running_pool_stats():
-    slots = Pool.slots_stats()
+def get_pool_stats() -> Dict[str, List[PoolSlots]]:
+    pool_stats = Pool.slots_stats()
+    return {stat_name: _build_pool_slots(pool_stats, stat_name) for stat_name in POOL_SLOT_TYPES}
 
-    res = [
-        RunningPoolSlots(pool=key, cnt=value['running'])
-        for key, value in slots.items()
-    ]
-
-    return res
+def _build_pool_slots(pool_stats: dict, stat_name: str) -> List[PoolSlots]:
+    return [PoolSlots(pool=k, cnt=v[stat_name]) for k, v in pool_stats.items()]
 
 @dataclass
 class DagScheduleInterval:
@@ -285,6 +284,18 @@ def _add_gauge_metric(metric, labels, value):
     ))
 
 
+def _build_pool_stat_gauge(pool_stats: List[PoolSlots], stat_name: str) -> Generator[Metric, None, None]:
+    pool_stat_metric = GaugeMetricFamily(
+        f'airflow_{stat_name}_pool_slots',
+        f'Shows the number of {stat_name} pool slots',
+        labels=['pool']
+    )
+
+    for pool_stat in pool_stats:
+        _add_gauge_metric(pool_stat_metric, {'pool': pool_stat.pool}, pool_stat.cnt)
+
+    return pool_stat_metric
+
 class MetricsCollector(object):
     '''collection of metrics for prometheus'''
 
@@ -294,18 +305,12 @@ class MetricsCollector(object):
     def collect(self) -> Generator[Metric, None, None]:
         '''collect metrics'''
 
-        pool_stats = get_running_pool_stats()
+        # Pool stats metrics
+        pool_stats = get_pool_stats()
 
-        running_pool_slots_metric = GaugeMetricFamily(
-            'airflow_running_pool_slots',
-            'Shows the number of running pool slots',
-            labels=['pool']
-        )
+        for stat_name in pool_stats.keys():
+            yield _build_pool_stat_gauge(pool_stats[stat_name], stat_name)
 
-        for pool_stat in pool_stats:
-            _add_gauge_metric(running_pool_slots_metric, {'pool': pool_stat.pool}, pool_stat.cnt)
-
-        yield running_pool_slots_metric
 
         # Dag Metrics and collect all labels
         dag_info = get_dag_status_info()
